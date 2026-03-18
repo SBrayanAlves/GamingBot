@@ -111,7 +111,7 @@ print(sand)
 coal = []
 
 for steamratinggame in sand:
-    if (float(steamratinggame["steamRatingPercent"])) >= 60:
+    if (float(steamratinggame["steamRatingPercent"])) >= 50:
         print(f"O jogo {steamratinggame["title"]} tem um steam rating de {steamratinggame["steamRatingPercent"]}")
         coal.append(steamratinggame)
     else:
@@ -127,7 +127,8 @@ for finalgame in coal:
     
     if store_id in _stores:
         store_name = _stores[store_id]
-        print(f'{finalgame["title"]} está na loja {store_name}')
+        print("="*50)
+        print(f'{finalgame["title"]}\nDe {finalgame["normalPrice"]} por {finalgame["salePrice"]} - {float(finalgame["savings"]):.2f}% de desconto\nNota na steam: {finalgame["steamRatingPercent"]}\nLoja: {store_name}')
     else:
         print("Loja não encontrada")
 
