@@ -1,10 +1,13 @@
 import os
 import requests 
+import telebot
 from dotenv import load_dotenv
 from database import _Session
 from models import GameDeal
 
 load_dotenv()
+
+bot = telebot.TeleBot(os.getenv("Bot"))
 
 # Def responsavel por fazer a requisicao na API de lojas e promocoes
 # Retorna duas listas: _stores & _deals
@@ -123,16 +126,24 @@ def coal_process(sand):
 # Montagem da Mensagem + Comparacao de storeID para achar a loja
 
 def msg_telebot(coal, _stores):
+    mensagens_finais = []
     for finalgame in coal:
         store_id = finalgame.get("storeID", "0")
         
         if store_id in _stores:
             store_name = _stores.get(store_id, "null")
-            print("="*50)
-            print(f'{finalgame["title"]}\nDe {finalgame["normalPrice"]} por {finalgame["salePrice"]} - {float(finalgame["savings"]):.2f}% de desconto\nNota na steam: {finalgame["steamRatingPercent"]}\nLoja: {store_name}')
+            text = f'{finalgame["title"]}\nDe {finalgame["normalPrice"]} por {finalgame["salePrice"]} - {float(finalgame["savings"]):.2f}% de desconto\nNota na steam: {finalgame["steamRatingPercent"]}\nLoja: {store_name}'
+            mensagens_finais.append({
+                "thumb": finalgame["thumb"],
+                "text": text
+                })
+    return mensagens_finais
 
+# Telegram
 
-if __name__ == "__main__":
+@bot.message_handler(commands=['start'])
+def comand_start(message):
+    bot.reply_to(message, "Inicializando...")
     result_api_store = api_stores()
     result_api_deals = api_deals()
 
@@ -141,4 +152,20 @@ if __name__ == "__main__":
     result_coal = coal_process(result_sand)
 
     final_msg = msg_telebot(result_coal, result_api_store)
+
+    if len(final_msg) == 0:
+        bot.send_message(message.chat.id, "Nenhuma promo encontrada")
+        return
+    
+    for item in final_msg:
+        bot.send_photo(
+            chat_id=message.chat.id,
+            photo=item["thumb"],
+            caption=item["text"]
+            )
+    bot.send_message(message.chat.id, "Busca finalizada")
+
+
+if __name__ == "__main__":
+    bot.infinity_polling()
 
