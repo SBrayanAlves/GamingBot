@@ -6,37 +6,44 @@ from models import GameDeal
 
 load_dotenv()
 
-_stores = {}
+# Def responsavel por fazer a requisicao na API de lojas e promocoes
+# Retorna duas listas: _stores & _deals
 
-stores = os.getenv("stores")
+def api_stores():
+    _stores = {}
 
-response_stores = requests.get(stores)
+    stores = os.getenv("stores")
 
-if response_stores.status_code == 200:
-    data_stores = response_stores.json()
-    for store in data_stores:
-        if store.get('isActive') == 1:
-            store_id = store.get('storeID')
-            store_name = store.get('storeName')
+    response_stores = requests.get(stores)
 
-            if store_id and store_name:
-                _stores[store_id] = store_name
+    if response_stores.status_code == 200:
+        data_stores = response_stores.json()
+        for store in data_stores:
+            if store.get('isActive') == 1:
+                store_id = store.get('storeID')
+                store_name = store.get('storeName')
 
-# Dados das lojas salvas no dicionario _stores, agora vamos pegar os jogos
+                if store_id and store_name:
+                    _stores[store_id] = store_name
+    return _stores
 
-_deals = []
-gravel = []
+    # Dados das lojas salvas no dicionario _stores, agora vamos pegar os jogos
 
-deals = os.getenv("deals")
+def api_deals():
+    _deals = []
 
-response_deals = requests.get(deals)
+    deals = os.getenv("deals")
 
-if response_deals.status_code == 200:
-    _deals = response_deals.json()
+    response_deals = requests.get(deals)
+
+    if response_deals.status_code == 200:
+        _deals = response_deals.json()
+
+    return _deals
 
 # ---
 # Filtragem vulgo "Pente fino"
-    
+
 # Jogos salvos na lista _deals, agora vamos para a logica de negocio
 
 # Comparacao do dealID
@@ -44,19 +51,23 @@ if response_deals.status_code == 200:
 # Primeira Filtragem -> "dealID" -> Compara se aquela promocao ja apareceu
 # Nome do processo -> Gravel 
 
-with _Session() as session:
-    deals_db = session.query(GameDeal).all()
-    ids_deal = {deal.deal_ID for deal in deals_db}
-    for api_dealid in _deals:
-        if api_dealid["dealID"] in ids_deal: 
-            #print(f"{api_dealid["dealID"]} ja existe no banco de dados")
-            pass
-        else:
-            #print(f"{api_dealid["dealID"]} ID novo registrado")
-            gravel.append(api_dealid)
-            gameid = GameDeal(deal_ID=api_dealid["dealID"])
-            session.add(gameid)
-    session.commit()
+# Def responsavel por fazer a comparacao no banco de dados e salvar nos itens
+
+def db_query(_deals):
+    gravel = []
+
+    with _Session() as session:
+        deals_db = session.query(GameDeal).all()
+        ids_deal = {deal.deal_ID for deal in deals_db}
+        for api_dealid in _deals:
+            if api_dealid.get("dealID", "0") in ids_deal: 
+                pass
+            else:
+                gravel.append(api_dealid)
+                gameid = GameDeal(deal_ID=api_dealid["dealID"])
+                session.add(gameid)
+        session.commit()
+    return gravel
 
 '''
 Como vai funcionar o sistema de filtragem
@@ -89,49 +100,45 @@ Exemplo de retorno API:
 # Nome do processo -> Sand
 # resultado = sand{}
 
-print(type(gravel)) # -> list -> dict [{...}]
-print(gravel)
+def sand_process(gravel):
+    sand = []
 
-sand = []
-
-for game in gravel:
-    if (float(game["savings"])) >= 30:
-        print(f'jogo com {float(game["savings"]):.2f}% de desconto')
-        sand.append(game)
-    else:
-        print("Desconto ruim")
-        pass
-
-print(sand)
+    for game in gravel:
+        if (float(game.get("savings", "0"))) >= 30:
+            sand.append(game)
+    return sand
 
 # Terceira Filtragem -> "steamRatingPercent" == nota na steam >= 6
 # Nome do processo -> Coal
 # resultado = coal[]
 
-coal = []
+def coal_process(sand):
+    coal = []
 
-for steamratinggame in sand:
-    if (float(steamratinggame["steamRatingPercent"])) >= 50:
-        print(f"O jogo {steamratinggame["title"]} tem um steam rating de {steamratinggame["steamRatingPercent"]}")
-        coal.append(steamratinggame)
-    else:
-        print(f"O Jogo {steamratinggame["title"]} e ruim")
-        pass
-
-print(coal)
+    for steamratinggame in sand:
+        if (float(steamratinggame.get("steamRatingPercent", "0"))) >= 50:
+            coal.append(steamratinggame)
+    return coal
 
 # Montagem da Mensagem + Comparacao de storeID para achar a loja
 
-for finalgame in coal:
-    store_id = finalgame["storeID"]
-    
-    if store_id in _stores:
-        store_name = _stores[store_id]
-        print("="*50)
-        print(f'{finalgame["title"]}\nDe {finalgame["normalPrice"]} por {finalgame["salePrice"]} - {float(finalgame["savings"]):.2f}% de desconto\nNota na steam: {finalgame["steamRatingPercent"]}\nLoja: {store_name}')
-    else:
-        print("Loja não encontrada")
+def msg_telebot(coal, _stores):
+    for finalgame in coal:
+        store_id = finalgame.get("storeID", "0")
+        
+        if store_id in _stores:
+            store_name = _stores.get(store_id, "null")
+            print("="*50)
+            print(f'{finalgame["title"]}\nDe {finalgame["normalPrice"]} por {finalgame["salePrice"]} - {float(finalgame["savings"]):.2f}% de desconto\nNota na steam: {finalgame["steamRatingPercent"]}\nLoja: {store_name}')
 
 
+if __name__ == "__main__":
+    result_api_store = api_stores()
+    result_api_deals = api_deals()
 
+    result_db_query = db_query(result_api_deals)
+    result_sand = sand_process(result_db_query)
+    result_coal = coal_process(result_sand)
+
+    final_msg = msg_telebot(result_coal, result_api_store)
 
